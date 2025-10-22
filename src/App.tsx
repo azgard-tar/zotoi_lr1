@@ -425,7 +425,7 @@ function App() {
   ): Interval => {
     const { a, b, c, d } = trapeze;
     // Формула (1): [l, r] = [α*b + (1-α)*a, α*c + (1-α)*d] [5]
-    // PDF Formula (1) [cite: 739] is [α(a₂-a₁)+a₁, a₄-α(a₄-a₃)]
+    // PDF Formula (1) is [α(a₂-a₁)+a₁, a₄-α(a₄-a₃)]
     // l = a + α(b - a) = a(1-α) + αb
     // r = d - α(d - c) = d(1-α) + αc
     const l = alpha * b + (1 - alpha) * a;
@@ -434,7 +434,7 @@ function App() {
   };
 
   // Хелпер функція для розрахунку показника ймовірності (Крок 6)
-  // Використовуємо формулу (3) з PDF[cite: 751]: p(I >= [0,1]) = max(1 - max((1-l)/(r-l+1), 0), 0)
+  // Використовуємо формулу (3) з PDF: p(I >= [0,1]) = max(1 - max((1-l)/(r-l+1), 0), 0)
   const calculateProbability = (interval: Interval): number => {
     const { l, r } = interval;
 
@@ -479,10 +479,8 @@ function App() {
         continue;
 
       if (calculationMethod === "generalized") {
-        // ----- FIX STARTS HERE -----
         // GENERALIZED (Узагальнений) [2]:
         // Крок 4: Агрегація T_ij в комбінований трапеційний терм GS_i (Min/Min/Max/Max)
-        // This is based on the PDF's example values, not the "averaged" text.
         const min_a = Math.min(
           ...trapezesForAlternative.map((trap) => trap.a)
         );
@@ -502,7 +500,6 @@ function App() {
           c: max_c,
           d: max_d,
         };
-        // ----- FIX ENDS HERE -----
 
         // Крок 5: Трансформація T_i_combined в інтервал I_i (α-cut)
         finalInterval = getIntervalFromTrapeze(T_i_combined, alpha);
@@ -766,7 +763,7 @@ function App() {
             </Stack>
           </Box>
 
-          {/* Right panel - Table */}
+          {/* Right panel - Main Table & Results Table */}
           <Box
             sx={{
               flex: "1 1 0",
@@ -776,6 +773,7 @@ function App() {
               overflowX: "auto",
             }}
           >
+            {/* --- MAIN CRITERIA TABLE --- */}
             <TableContainer component={Paper}>
               <Table size="small">
                 <TableHead>
@@ -786,33 +784,6 @@ function App() {
                         C{i + 1}
                       </TableCell>
                     ))}
-                    {/* --- GENERALIZED HEADERS --- */}
-                    {displayResults.length > 0 &&
-                      calculationMethod === "generalized" && (
-                        <>
-                          <TableCell>Fuzzy Intervals</TableCell>
-                          <TableCell>Probability Generalized</TableCell>
-                          <TableCell>Best Alternatives</TableCell>
-                        </>
-                      )}
-                    {/* --- PESSIMISTIC HEADERS --- */}
-                    {displayResults.length > 0 &&
-                      calculationMethod === "pessimistic" && (
-                        <>
-                          <TableCell>Minimum Pessimistic</TableCell>
-                          <TableCell>Probability Pessimistic</TableCell>
-                          <TableCell>Result Pessimistic</TableCell>
-                        </>
-                      )}
-                    {/* --- OPTIMISTIC HEADERS --- */}
-                    {displayResults.length > 0 &&
-                      calculationMethod === "optimistic" && (
-                        <>
-                          <TableCell>Maximum Optimistic</TableCell>
-                          <TableCell>Probability Optimistic</TableCell>
-                          <TableCell>Result Optimistic</TableCell>
-                        </>
-                      )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -840,119 +811,138 @@ function App() {
                           {renderCriteriaCellContent(rowIndex, colIndex)}
                         </TableCell>
                       ))}
-                      {/* --- GENERALIZED CELLS --- */}
-                      {displayResults.length > 0 &&
-                        calculationMethod === "generalized" && (
-                          <>
-                            <TableCell sx={{ whiteSpace: "nowrap" }}>
-                              [
-                              {displayResults[
-                                rowIndex
-                              ].genInterval?.l.toFixed(4)}
-                              ,{" "}
-                              {displayResults[
-                                rowIndex
-                              ].genInterval?.r.toFixed(4)}
-                              ]
-                            </TableCell>
-                            <TableCell>
-                              {displayResults[
-                                rowIndex
-                              ].genProbability?.toFixed(7)}
-                            </TableCell>
-                            <TableCell
-                              sx={{
-                                backgroundColor:
-                                  displayResults[rowIndex]
-                                    .genProbability === bestProbability
-                                    ? "#d7fcdf"
-                                    : "inherit",
-                              }}
-                            >
-                              {displayResults[rowIndex]
-                                .genProbability === bestProbability
-                                ? bestProbability?.toFixed(7)
-                                : ""}
-                            </TableCell>
-                          </>
-                        )}
-                      {/* --- PESSIMISTIC CELLS --- */}
-                      {displayResults.length > 0 &&
-                        calculationMethod === "pessimistic" && (
-                          <>
-                            <TableCell sx={{ whiteSpace: "nowrap" }}>
-                              [
-                              {displayResults[
-                                rowIndex
-                              ].pessInterval?.l.toFixed(4)}
-                              ,{" "}
-                              {displayResults[
-                                rowIndex
-                              ].pessInterval?.r.toFixed(4)}
-                              ]
-                            </TableCell>
-                            <TableCell>
-                              {displayResults[
-                                rowIndex
-                              ].pessProbability?.toFixed(7)}
-                            </TableCell>
-                            <TableCell
-                              sx={{
-                                backgroundColor:
-                                  displayResults[rowIndex]
-                                    .pessProbability === bestProbability
-                                    ? "#d7fcdf"
-                                    : "inherit",
-                              }}
-                            >
-                              {displayResults[rowIndex]
-                                .pessProbability === bestProbability
-                                ? bestProbability?.toFixed(7)
-                                : ""}
-                            </TableCell>
-                          </>
-                        )}
-                      {/* --- OPTIMISTIC CELLS --- */}
-                      {displayResults.length > 0 &&
-                        calculationMethod === "optimistic" && (
-                          <>
-                            <TableCell sx={{ whiteSpace: "nowrap" }}>
-                              [
-                              {displayResults[
-                                rowIndex
-                              ].optInterval?.l.toFixed(4)}
-                              ,{" "}
-                              {displayResults[
-                                rowIndex
-                              ].optInterval?.r.toFixed(4)}
-                              ]
-                            </TableCell>
-                            <TableCell>
-                              {displayResults[
-                                rowIndex
-                              ].optProbability?.toFixed(7)}
-                            </TableCell>
-                            <TableCell
-                              sx={{
-                                backgroundColor:
-                                  displayResults[rowIndex]
-                                    .optProbability === bestProbability
-                                    ? "#d7fcdf"
-                                    : "inherit",
-                              }}
-                            >
-                              {displayResults[rowIndex]
-                                .optProbability === bestProbability
-                                ? bestProbability?.toFixed(7)
-                                : ""}
-                            </TableCell>
-                          </>
-                        )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </TableContainer>
+
+            {/* --- NEW CALCULATION RESULTS TABLE --- */}
+            {displayResults.length > 0 && (
+              <Box mt={4}>
+                <Typography variant="h6" gutterBottom>
+                  Calculation Results (Method: {calculationMethod})
+                </Typography>
+                <TableContainer component={Paper}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Alternative</TableCell>
+                        {/* --- GENERALIZED HEADERS --- */}
+                        {calculationMethod === "generalized" && (
+                          <>
+                            <TableCell>Fuzzy Intervals</TableCell>
+                            <TableCell>Probability Generalized</TableCell>
+                            <TableCell>Best Alternatives</TableCell>
+                          </>
+                        )}
+                        {/* --- PESSIMISTIC HEADERS --- */}
+                        {calculationMethod === "pessimistic" && (
+                          <>
+                            <TableCell>Minimum Pessimistic</TableCell>
+                            <TableCell>Probability Pessimistic</TableCell>
+                            <TableCell>Result Pessimistic</TableCell>
+                          </>
+                        )}
+                        {/* --- OPTIMISTIC HEADERS --- */}
+                        {calculationMethod === "optimistic" && (
+                          <>
+                            <TableCell>Maximum Optimistic</TableCell>
+                            <TableCell>Probability Optimistic</TableCell>
+                            <TableCell>Result Optimistic</TableCell>
+                          </>
+                        )}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {displayResults.map((res, rowIndex) => (
+                        <TableRow key={rowIndex}>
+                          <TableCell>A{rowIndex + 1}</TableCell>
+                          {/* --- GENERALIZED CELLS --- */}
+                          {calculationMethod === "generalized" && (
+                            <>
+                              <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                [
+                                {res.genInterval?.l.toFixed(4)}
+                                , {res.genInterval?.r.toFixed(4)}
+                                ]
+                              </TableCell>
+                              <TableCell>
+                                {res.genProbability?.toFixed(4)}
+                              </TableCell>
+                              <TableCell
+                                sx={{
+                                  backgroundColor:
+                                    res.genProbability === bestProbability
+                                      ? "#d7fcdf"
+                                      : "inherit",
+                                }}
+                              >
+                                {res.genProbability === bestProbability
+                                  ? bestProbability?.toFixed(4)
+                                  : ""}
+                              </TableCell>
+                            </>
+                          )}
+                          {/* --- PESSIMISTIC CELLS --- */}
+                          {calculationMethod === "pessimistic" && (
+                            <>
+                              <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                [
+                                {res.pessInterval?.l.toFixed(4)}
+                                , {res.pessInterval?.r.toFixed(4)}
+                                ]
+                              </TableCell>
+                              <TableCell>
+                                {res.pessProbability?.toFixed(4)}
+                              </TableCell>
+                              <TableCell
+                                sx={{
+                                  backgroundColor:
+                                    res.pessProbability === bestProbability
+                                      ? "#d7fcdf"
+                                      : "inherit",
+                                }}
+                              >
+                                {res.pessProbability === bestProbability
+                                  ? bestProbability?.toFixed(4)
+                                  : ""}
+                              </TableCell>
+                            </>
+                          )}
+                          {/* --- OPTIMISTIC CELLS --- */}
+                          {calculationMethod === "optimistic" && (
+                            <>
+                              <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                [
+                                {res.optInterval?.l.toFixed(4)}
+                                , {res.optInterval?.r.toFixed(4)}
+                                ]
+                              </TableCell>
+                              <TableCell>
+                                {res.optProbability?.toFixed(4)}
+                              </TableCell>
+                              <TableCell
+                                sx={{
+                                  backgroundColor:
+                                    res.optProbability === bestProbability
+                                      ? "#d7fcdf"
+                                      : "inherit",
+                                }}
+                              >
+                                {res.optProbability === bestProbability
+                                  ? bestProbability?.toFixed(4)
+                                  : ""}
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
           </Box>
         </Box>
 
