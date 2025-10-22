@@ -425,7 +425,7 @@ function App() {
   ): Interval => {
     const { a, b, c, d } = trapeze;
     // Формула (1): [l, r] = [α*b + (1-α)*a, α*c + (1-α)*d] [5]
-    // PDF Formula (1) is [α(a₂-a₁)+a₁, a₄-α(a₄-a₃)]
+    // PDF Formula (1) [cite: 739] is [α(a₂-a₁)+a₁, a₄-α(a₄-a₃)]
     // l = a + α(b - a) = a(1-α) + αb
     // r = d - α(d - c) = d(1-α) + αc
     const l = alpha * b + (1 - alpha) * a;
@@ -433,9 +433,8 @@ function App() {
     return { l: l, r: r };
   };
 
-  // ----- FIX STARTS HERE -----
   // Хелпер функція для розрахунку показника ймовірності (Крок 6)
-  // Використовуємо формулу (3) з PDF : p(I >= [0,1]) = max(1 - max((1-l)/(r-l+1), 0), 0)
+  // Використовуємо формулу (3) з PDF[cite: 751]: p(I >= [0,1]) = max(1 - max((1-l)/(r-l+1), 0), 0)
   const calculateProbability = (interval: Interval): number => {
     const { l, r } = interval;
 
@@ -443,7 +442,6 @@ function App() {
     const prob = Math.max(1 - Math.max((1 - l) / (r - l + 1), 0), 0);
     return prob;
   };
-  // ----- FIX ENDS HERE -----
 
   const handleCalculateMethod = () => {
     console.log("Calculating with method:", calculationMethod);
@@ -468,38 +466,46 @@ function App() {
     );
 
     for (let i = 0; i < currentNumAlternatives; i++) {
+      const trapezesForAlternative = trapezeMatrix[i];
       const intervalsForAlternative = intervalMatrix[i];
       let finalInterval: Interval;
       let probability: number;
 
-      if (currentNumCriterias === 0 || intervalsForAlternative.length === 0)
+      if (
+        currentNumCriterias === 0 ||
+        intervalsForAlternative.length === 0 ||
+        trapezesForAlternative.length === 0
+      )
         continue;
 
       if (calculationMethod === "generalized") {
+        // ----- FIX STARTS HERE -----
         // GENERALIZED (Узагальнений) [2]:
-        // Крок 4: Агрегація T_ij в осереднений трапеційний терм T_i (Average)
-
-        const sumTrapeze = trapezeMatrix[i].reduce(
-          (acc, T_ij) => {
-            return {
-              a: acc.a + T_ij.a,
-              b: acc.b + T_ij.b,
-              c: acc.c + T_ij.c,
-              d: acc.d + T_ij.d,
-            };
-          },
-          { a: 0, b: 0, c: 0, d: 0 }
+        // Крок 4: Агрегація T_ij в комбінований трапеційний терм GS_i (Min/Min/Max/Max)
+        // This is based on the PDF's example values, not the "averaged" text.
+        const min_a = Math.min(
+          ...trapezesForAlternative.map((trap) => trap.a)
+        );
+        const min_b = Math.min(
+          ...trapezesForAlternative.map((trap) => trap.b)
+        );
+        const max_c = Math.max(
+          ...trapezesForAlternative.map((trap) => trap.c)
+        );
+        const max_d = Math.max(
+          ...trapezesForAlternative.map((trap) => trap.d)
         );
 
-        const T_i_avg: Trapeze = {
-          a: sumTrapeze.a / currentNumCriterias,
-          b: sumTrapeze.b / currentNumCriterias,
-          c: sumTrapeze.c / currentNumCriterias,
-          d: sumTrapeze.d / currentNumCriterias,
+        const T_i_combined: Trapeze = {
+          a: min_a,
+          b: min_b,
+          c: max_c,
+          d: max_d,
         };
+        // ----- FIX ENDS HERE -----
 
-        // Крок 5: Трансформація T_i_avg в інтервал I_i (α-cut)
-        finalInterval = getIntervalFromTrapeze(T_i_avg, alpha);
+        // Крок 5: Трансформація T_i_combined в інтервал I_i (α-cut)
+        finalInterval = getIntervalFromTrapeze(T_i_combined, alpha);
         probability = calculateProbability(finalInterval);
 
         results[i] = {
@@ -854,7 +860,6 @@ function App() {
                                 rowIndex
                               ].genProbability?.toFixed(7)}
                             </TableCell>
-                            {/* ----- FIX: ADDED GREEN BG ----- */}
                             <TableCell
                               sx={{
                                 backgroundColor:
@@ -891,7 +896,6 @@ function App() {
                                 rowIndex
                               ].pessProbability?.toFixed(7)}
                             </TableCell>
-                            {/* ----- FIX: ADDED GREEN BG ----- */}
                             <TableCell
                               sx={{
                                 backgroundColor:
@@ -928,7 +932,6 @@ function App() {
                                 rowIndex
                               ].optProbability?.toFixed(7)}
                             </TableCell>
-                            {/* ----- FIX: ADDED GREEN BG ----- */}
                             <TableCell
                               sx={{
                                 backgroundColor:
