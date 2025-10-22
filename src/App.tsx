@@ -270,17 +270,34 @@ function App() {
     upsertCurrentTerm({ tri: normalized });
   };
 
+  // ----- FIX STARTS HERE -----
   const handleFinish = () => {
-    // Initialize table with empty cells
-    const newTableData = Array.from({ length: numAlternatives }, () =>
-      Array.from({ length: numCriterias }, () => ({
-        from: undefined,
-        to: undefined,
-      }))
-    );
-    setTableData(newTableData);
+    // Check if table dimensions match current settings
+    const isTableInvalid =
+      tableData.length !== numAlternatives ||
+      tableData[0]?.length !== numCriterias;
+
+    if (isTableInvalid) {
+      // Initialize table with empty cells IF dimensions are mismatched
+      const newTableData = Array.from({ length: numAlternatives }, () =>
+        Array.from({ length: numCriterias }, () => ({
+          from: undefined,
+          to: undefined,
+        }))
+      );
+      setTableData(newTableData);
+    }
+    
+    // Reset transformation state, as requested
+    setIsTransformedToIntervals(false);
+    setIsTransformedToTrapeze(false);
+    setDisplayResults([]);
+    setBestProbability(null);
+
+    // Go to evaluation page
     setCurrentPage("evaluation");
   };
+  // ----- FIX ENDS HERE -----
 
   const getCellText = (cell: CellValue) => {
     const { from, to } = cell;
@@ -760,6 +777,18 @@ function App() {
               >
                 Calculate method
               </Button>
+              
+              {/* --- NEW BUTTON START --- */}
+              <Divider sx={{ pt: 1 }} />
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={() => setCurrentPage("setup")}
+              >
+                Back to terms
+              </Button>
+              {/* --- NEW BUTTON END --- */}
+
             </Stack>
           </Box>
 
