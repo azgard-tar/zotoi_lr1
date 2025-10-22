@@ -152,12 +152,17 @@ function App() {
 
     if (triangularTerms.length === 0) return null;
 
+    // Параметри трикутних чисел мають бути впорядковані (left <= middle <= right)
     const orderedTerms = triangularTerms.map((t) => orderTriangular(t));
 
+    // Витягуємо параметри L, M, R з усіх трикутних чисел
     const lefts = orderedTerms.map((t) => t.left);
     const middles = orderedTerms.map((t) => t.middle);
     const rights = orderedTerms.map((t) => t.right);
 
+    // Агрегація в трапеційний терм (a, b, c, d) [4, 10]
+    // a = min(lefts); d = max(rights)
+    // b = min(middles); c = max(middles)
     const a = Math.min(...lefts);
     const b = Math.min(...middles);
     const c = Math.max(...middles);
@@ -166,6 +171,7 @@ function App() {
     return { a, b, c, d };
   };
 
+  // Keep current index within bounds when terms array changes
   useEffect(() => {
     setCurrentTermIndex((i) =>
       Math.min(Math.max(0, i), Math.max(0, terms.length - 1))
@@ -254,6 +260,7 @@ function App() {
   };
 
   const normalizeCurrentTerm = () => {
+    // Min–max normalization from [0, 100] to [0, 1]
     const { left, middle, right } = currentTerm.tri;
     const normalized = orderTriangular({
       left: left / 100,
@@ -264,6 +271,7 @@ function App() {
   };
 
   const handleFinish = () => {
+    // Initialize table with empty cells
     const newTableData = Array.from({ length: numAlternatives }, () =>
       Array.from({ length: numCriterias }, () => ({
         from: undefined,
@@ -292,7 +300,7 @@ function App() {
   };
 
   const handleCellClick = (row: number, col: number) => {
-    if (isTransformedToTrapeze) return;
+    if (isTransformedToTrapeze) return; // Disable editing after trapeze transformation
     const cell = tableData[row][col];
     setModalFrom(cell.from || "");
     setModalTo(cell.to || "");
@@ -321,30 +329,55 @@ function App() {
       );
       return;
     }
+
+    // Отримуємо впорядковані короткі імена термів
     const termShortNames = terms.map((t) => t.shortName);
 
     const intervalLTSets: string[][][] = tableData.map((row: CellValue[]) =>
       row.map((cell: CellValue) => {
         const { from, to } = cell;
-        if (!from && !to) return [];
-        if (from && from === to) return [from];
+
+        if (!from && !to) {
+          return [];
+        }
+
+        // Якщо задано один терм
+        if (from && from === to) {
+          return [from];
+        }
+
+        // Логіка для "в межах (within)" [7]
         if (from && to) {
           const startIndex = termShortNames.indexOf(from);
           const endIndex = termShortNames.indexOf(to);
+
           if (startIndex !== -1 && endIndex !== -1) {
             const minIndex = Math.min(startIndex, endIndex);
             const maxIndex = Math.max(startIndex, endIndex);
+
+            // Включаємо всі терми між from та to включно [1]
             return termShortNames.slice(minIndex, maxIndex + 1);
           }
         }
+
+        // Логіка для "over" (вище) [8]
         if (from && !to) {
           const startIndex = termShortNames.indexOf(from);
-          if (startIndex !== -1) return termShortNames.slice(startIndex);
+          if (startIndex !== -1) {
+            // Включаючи сам терм "from" і всі наступні
+            return termShortNames.slice(startIndex);
+          }
         }
+
+        // Логіка для "less" (нижче) [8]
         if (!from && to) {
           const endIndex = termShortNames.indexOf(to);
-          if (endIndex !== -1) return termShortNames.slice(0, endIndex + 1);
+          if (endIndex !== -1) {
+            // Включаючи сам терм "to" і всі попередні
+            return termShortNames.slice(0, endIndex + 1);
+          }
         }
+
         return [];
       })
     );
@@ -366,8 +399,15 @@ function App() {
     const trapezeMatrix: Trapeze[][] = internalIntervalLTSets.map(
       (row: string[][]) =>
         row.map((cellLTSets) => {
+          // Використовуємо хелпер з поточними термами
           const trapeze = getTrapezeFromLTSets(cellLTSets, terms);
-          return trapeze || { a: 0, b: 0, c: 0, d: 0 };
+
+          // Якщо трапеція не може бути сформована (наприклад, через помилку), використовуємо заглушку
+          if (!trapeze) {
+            // Повертаємо трапецію, яка не вплине на обчислення (наприклад, (0, 0, 0, 0))
+            return { a: 0, b: 0, c: 0, d: 0 };
+          }
+          return trapeze;
         })
     );
 
@@ -378,81 +418,133 @@ function App() {
     setBestProbability(null);
   };
 
+  // Хелпер функція для застосування α-перерізу (Крок 5)
   const getIntervalFromTrapeze = (
     trapeze: Trapeze,
     alpha: number
   ): Interval => {
     const { a, b, c, d } = trapeze;
+    // Формула (1): [l, r] = [α*b + (1-α)*a, α*c + (1-α)*d] [5]
+    // PDF Formula (1) is [α(a₂-a₁)+a₁, a₄-α(a₄-a₃)]
+    // l = a + α(b - a) = a(1-α) + αb
+    // r = d - α(d - c) = d(1-α) + αc
     const l = alpha * b + (1 - alpha) * a;
     const r = alpha * c + (1 - alpha) * d;
     return { l: l, r: r };
   };
 
+  // ----- FIX STARTS HERE -----
+  // Хелпер функція для розрахунку показника ймовірності (Крок 6)
+  // Використовуємо формулу (3) з PDF : p(I >= [0,1]) = max(1 - max((1-l)/(r-l+1), 0), 0)
   const calculateProbability = (interval: Interval): number => {
     const { l, r } = interval;
-    if (l >= 0) return 1.0;
-    if (r <= 0) return 0.0;
-    if (r > l) return r / (r - l);
-    return 0;
+
+    // This formula matches the results from the PDF and screenshots
+    const prob = Math.max(1 - Math.max((1 - l) / (r - l + 1), 0), 0);
+    return prob;
   };
+  // ----- FIX ENDS HERE -----
 
   const handleCalculateMethod = () => {
+    console.log("Calculating with method:", calculationMethod);
+
     if (!isTransformedToTrapeze || internalTrapezeMatrix.length === 0) {
       console.error("Trapeze matrix is not ready. Run transformation first.");
       return;
     }
 
-    const results: DisplayResult[] = Array.from({ length: numAlternatives }, () => ({}));
+    const trapezeMatrix = internalTrapezeMatrix;
+    const currentNumAlternatives = numAlternatives;
+    const currentNumCriterias = numCriterias;
+    const results: DisplayResult[] = Array.from(
+      { length: currentNumAlternatives },
+      () => ({})
+    );
     let maxProbability = -1;
 
-    const intervalMatrix: Interval[][] = internalTrapezeMatrix.map((row) =>
+    // --- 1. Обчислення інтервалів I_ij (α-переріз) для всіх методів ---
+    const intervalMatrix: Interval[][] = trapezeMatrix.map((row) =>
       row.map((trapeze) => getIntervalFromTrapeze(trapeze, alpha))
     );
 
-    for (let i = 0; i < numAlternatives; i++) {
+    for (let i = 0; i < currentNumAlternatives; i++) {
       const intervalsForAlternative = intervalMatrix[i];
-      if (numCriterias === 0 || intervalsForAlternative.length === 0) continue;
+      let finalInterval: Interval;
+      let probability: number;
+
+      if (currentNumCriterias === 0 || intervalsForAlternative.length === 0)
+        continue;
 
       if (calculationMethod === "generalized") {
-        const sumTrapeze = internalTrapezeMatrix[i].reduce(
-          (acc, T_ij) => ({
-            a: acc.a + T_ij.a,
-            b: acc.b + T_ij.b,
-            c: acc.c + T_ij.c,
-            d: acc.d + T_ij.d,
-          }),
+        // GENERALIZED (Узагальнений) [2]:
+        // Крок 4: Агрегація T_ij в осереднений трапеційний терм T_i (Average)
+
+        const sumTrapeze = trapezeMatrix[i].reduce(
+          (acc, T_ij) => {
+            return {
+              a: acc.a + T_ij.a,
+              b: acc.b + T_ij.b,
+              c: acc.c + T_ij.c,
+              d: acc.d + T_ij.d,
+            };
+          },
           { a: 0, b: 0, c: 0, d: 0 }
         );
 
         const T_i_avg: Trapeze = {
-          a: sumTrapeze.a / numCriterias,
-          b: sumTrapeze.b / numCriterias,
-          c: sumTrapeze.c / numCriterias,
-          d: sumTrapeze.d / numCriterias,
+          a: sumTrapeze.a / currentNumCriterias,
+          b: sumTrapeze.b / currentNumCriterias,
+          c: sumTrapeze.c / currentNumCriterias,
+          d: sumTrapeze.d / currentNumCriterias,
         };
 
-        const finalInterval = getIntervalFromTrapeze(T_i_avg, alpha);
-        const probability = calculateProbability(finalInterval);
+        // Крок 5: Трансформація T_i_avg в інтервал I_i (α-cut)
+        finalInterval = getIntervalFromTrapeze(T_i_avg, alpha);
+        probability = calculateProbability(finalInterval);
 
-        results[i] = { ...results[i], genInterval: finalInterval, genProbability: probability };
+        results[i] = {
+          ...results[i],
+          genInterval: finalInterval,
+          genProbability: probability,
+        };
         if (probability > maxProbability) maxProbability = probability;
-
       } else if (calculationMethod === "pessimistic") {
-        const min_l = Math.min(...intervalsForAlternative.map(inv => inv.l));
-        const min_r = Math.min(...intervalsForAlternative.map(inv => inv.r));
-        const finalInterval = { l: min_l, r: min_r };
-        const probability = calculateProbability(finalInterval);
+        // PESSIMISTIC (Песимістичний) [11]: MIN операція на I_ij (Крок 6)
+        // I_i = [ min(l_j), min(r_j) ] (Формула 2)
 
-        results[i] = { ...results[i], pessInterval: finalInterval, pessProbability: probability };
+        const min_l = Math.min(
+          ...intervalsForAlternative.map((inv) => inv.l)
+        );
+        const min_r = Math.min(
+          ...intervalsForAlternative.map((inv) => inv.r)
+        );
+        finalInterval = { l: min_l, r: min_r };
+        probability = calculateProbability(finalInterval);
+
+        results[i] = {
+          ...results[i],
+          pessInterval: finalInterval,
+          pessProbability: probability,
+        };
         if (probability > maxProbability) maxProbability = probability;
-
       } else if (calculationMethod === "optimistic") {
-        const max_l = Math.max(...intervalsForAlternative.map(inv => inv.l));
-        const max_r = Math.max(...intervalsForAlternative.map(inv => inv.r));
-        const finalInterval = { l: max_l, r: max_r };
-        const probability = calculateProbability(finalInterval);
+        // OPTIMISTIC (Оптимістичний) [12]: MAX операція на I_ij (Крок 6)
+        // I_i = [ max(l_j), max(r_j) ]
 
-        results[i] = { ...results[i], optInterval: finalInterval, optProbability: probability };
+        const max_l = Math.max(
+          ...intervalsForAlternative.map((inv) => inv.l)
+        );
+        const max_r = Math.max(
+          ...intervalsForAlternative.map((inv) => inv.r)
+        );
+        finalInterval = { l: max_l, r: max_r };
+        probability = calculateProbability(finalInterval);
+
+        results[i] = {
+          ...results[i],
+          optInterval: finalInterval,
+          optProbability: probability,
+        };
         if (probability > maxProbability) maxProbability = probability;
       }
     }
@@ -735,6 +827,8 @@ function App() {
                             "&:hover": isTransformedToIntervals
                               ? {}
                               : { backgroundColor: "#f0f0f0" },
+                            minWidth: 100,
+                            whiteSpace: "nowrap",
                           }}
                         >
                           {renderCriteriaCellContent(rowIndex, colIndex)}
@@ -744,16 +838,35 @@ function App() {
                       {displayResults.length > 0 &&
                         calculationMethod === "generalized" && (
                           <>
-                            <TableCell>
-                              [{displayResults[rowIndex].genInterval?.l.toFixed(4)},{" "}
-                              {displayResults[rowIndex].genInterval?.r.toFixed(4)}]
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              [
+                              {displayResults[
+                                rowIndex
+                              ].genInterval?.l.toFixed(4)}
+                              ,{" "}
+                              {displayResults[
+                                rowIndex
+                              ].genInterval?.r.toFixed(4)}
+                              ]
                             </TableCell>
                             <TableCell>
-                              {displayResults[rowIndex].genProbability?.toFixed(4)}
+                              {displayResults[
+                                rowIndex
+                              ].genProbability?.toFixed(7)}
                             </TableCell>
-                            <TableCell>
-                              {displayResults[rowIndex].genProbability === bestProbability
-                                ? bestProbability?.toFixed(4)
+                            {/* ----- FIX: ADDED GREEN BG ----- */}
+                            <TableCell
+                              sx={{
+                                backgroundColor:
+                                  displayResults[rowIndex]
+                                    .genProbability === bestProbability
+                                    ? "#d7fcdf"
+                                    : "inherit",
+                              }}
+                            >
+                              {displayResults[rowIndex]
+                                .genProbability === bestProbability
+                                ? bestProbability?.toFixed(7)
                                 : ""}
                             </TableCell>
                           </>
@@ -762,16 +875,35 @@ function App() {
                       {displayResults.length > 0 &&
                         calculationMethod === "pessimistic" && (
                           <>
-                            <TableCell>
-                              [{displayResults[rowIndex].pessInterval?.l.toFixed(4)},{" "}
-                              {displayResults[rowIndex].pessInterval?.r.toFixed(4)}]
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              [
+                              {displayResults[
+                                rowIndex
+                              ].pessInterval?.l.toFixed(4)}
+                              ,{" "}
+                              {displayResults[
+                                rowIndex
+                              ].pessInterval?.r.toFixed(4)}
+                              ]
                             </TableCell>
                             <TableCell>
-                              {displayResults[rowIndex].pessProbability?.toFixed(4)}
+                              {displayResults[
+                                rowIndex
+                              ].pessProbability?.toFixed(7)}
                             </TableCell>
-                            <TableCell>
-                              {displayResults[rowIndex].pessProbability === bestProbability
-                                ? bestProbability?.toFixed(4)
+                            {/* ----- FIX: ADDED GREEN BG ----- */}
+                            <TableCell
+                              sx={{
+                                backgroundColor:
+                                  displayResults[rowIndex]
+                                    .pessProbability === bestProbability
+                                    ? "#d7fcdf"
+                                    : "inherit",
+                              }}
+                            >
+                              {displayResults[rowIndex]
+                                .pessProbability === bestProbability
+                                ? bestProbability?.toFixed(7)
                                 : ""}
                             </TableCell>
                           </>
@@ -780,16 +912,35 @@ function App() {
                       {displayResults.length > 0 &&
                         calculationMethod === "optimistic" && (
                           <>
-                            <TableCell>
-                              [{displayResults[rowIndex].optInterval?.l.toFixed(4)},{" "}
-                              {displayResults[rowIndex].optInterval?.r.toFixed(4)}]
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              [
+                              {displayResults[
+                                rowIndex
+                              ].optInterval?.l.toFixed(4)}
+                              ,{" "}
+                              {displayResults[
+                                rowIndex
+                              ].optInterval?.r.toFixed(4)}
+                              ]
                             </TableCell>
                             <TableCell>
-                              {displayResults[rowIndex].optProbability?.toFixed(4)}
+                              {displayResults[
+                                rowIndex
+                              ].optProbability?.toFixed(7)}
                             </TableCell>
-                            <TableCell>
-                              {displayResults[rowIndex].optProbability === bestProbability
-                                ? bestProbability?.toFixed(4)
+                            {/* ----- FIX: ADDED GREEN BG ----- */}
+                            <TableCell
+                              sx={{
+                                backgroundColor:
+                                  displayResults[rowIndex]
+                                    .optProbability === bestProbability
+                                    ? "#d7fcdf"
+                                    : "inherit",
+                              }}
+                            >
+                              {displayResults[rowIndex]
+                                .optProbability === bestProbability
+                                ? bestProbability?.toFixed(7)
                                 : ""}
                             </TableCell>
                           </>
